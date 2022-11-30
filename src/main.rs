@@ -1,8 +1,8 @@
 const GRAV: f32 = 30.0;
 const M1: f32 = 1.0;
-const M2: f32 = 3.0;
+const M2: f32 = 1.0;
 const F_LENGTH: f32 = 2.0;
-const S_LENGTH: f32 = 2.0;
+const S_LENGTH: f32 = 2.5;
 const H: f32 = 0.01;
 const DEB: bool = false;
 
@@ -25,6 +25,22 @@ struct World {
     theta2: f32,
 }
 
+impl World {
+    fn total_energy(&self) -> f32 {
+        let energy = 
+        M1*(self.omega1*F_LENGTH).powi(2) / 2.0
+        + M2*( 
+                (self.omega2*S_LENGTH).powi(2) 
+                + (self.omega1*F_LENGTH).powi(2)
+                + 2.0*self.omega1*self.omega2*F_LENGTH*S_LENGTH*(self.theta1 - self.theta2).cos()
+            ) / 2.0
+        - M1*GRAV*F_LENGTH*self.theta1.cos()
+        - M2*GRAV*(F_LENGTH*self.theta1.cos() + S_LENGTH*self.theta2.cos());
+
+        energy
+    }
+    
+}
 struct DebugWorld {
     pos: f32,
     vel: f32,
@@ -40,8 +56,10 @@ async fn main() {
     //work on pHsics
 
     let string_anchor: Position = Position { x: screen_width()/2.0, y:20.0};
-    let mut world: World = World { omega1: 0.0, omega2: 0.0, theta1: 10.0, theta2: -30.0};
+    let mut world: World = World { omega1: 0.0, omega2: 0.0, theta1: 50.0, theta2: 10.0};
     let mut time = 0.0;
+
+    let mut max_kinenergy: f32 = 0.0;
 
     world.theta1 = degtorad(&world.theta1);
     world.theta2 = degtorad(&world.theta2);
@@ -50,6 +68,11 @@ async fn main() {
         loop {
             // print!("time: {}; (zeta1_old {} zeta2_old {} omega1_old {} omega2_old {}) -> ", time, world.theta1, world.theta2, world.omega1, world.omega2);
             update(&mut world, time);
+            let energy = world.total_energy();
+            if (max_kinenergy < energy) || (max_kinenergy == 0.0) {
+                max_kinenergy = energy;
+            }
+
             // print!("(zeta1_new {} zeta2_new {} omega1_new {} omega2_new {})\n", world.theta1, world.theta2, world.omega1, world.omega2);
             
             let fb_pos: Position = Position { x: string_anchor.x + F_LENGTH*L_COF*world.theta1.sin(), y: string_anchor.y + F_LENGTH*L_COF*world.theta1.cos() };
@@ -66,7 +89,9 @@ async fn main() {
             draw_circle(sb_pos.x, sb_pos.y, 15.0, WHITE);
     
             draw_text("IT WORKS!", 20.0, 20.0, 30.0, WHITE);
-            draw_text(&ball_pos_string, screen_width() - 350.0, 20.0, 20.0, WHITE);
+            draw_text(&format!("Max Total Energy: {}", max_kinenergy), screen_width() - 350.0, 20.0, 20.0, WHITE);
+            draw_text(&format!("Cur Total Energy: {}", energy), screen_width() - 350.0, 40.0, 20.0, WHITE);
+
     
             time += H;
             // thread::sleep(time::Duration::from_millis(1));
@@ -106,14 +131,24 @@ async fn main() {
 // omega = w
 fn update(world: &mut World, time: f32) {
     
+    // let thata1_n1 = rung_kutta(time, world.theta1, world, &der_zeta1);
+    // let thata2_n1 = rung_kutta(time, world.theta2, world, &der_zeta2);
+    
+    // let omega1_n1 = rung_kutta(time, world.omega1, world, &der_omega1);
+    // let omega2_n1 = rung_kutta(time, world.omega2, world, &der_omega2);    
+
+    // (world.theta1, world.theta2, world.omega1, world.omega2) = 
+    // (thata1_n1, thata2_n1, omega1_n1, omega2_n1)
+
+    let omega1_n1 = rung_kutta(time, world.omega1, world, &der_omega1);
+    let omega2_n1 = rung_kutta(time, world.omega2, world, &der_omega2); 
+    world.omega1 = omega1_n1;
+    world.omega2 = omega2_n1;
+
     let thata1_n1 = rung_kutta(time, world.theta1, world, &der_zeta1);
     let thata2_n1 = rung_kutta(time, world.theta2, world, &der_zeta2);
-    
-    let omega1_n1 = rung_kutta(time, world.omega1, world, &der_omega1);
-    let omega2_n1 = rung_kutta(time, world.omega2, world, &der_omega2);    
 
-    (world.theta1, world.theta2, world.omega1, world.omega2) = 
-    (thata1_n1, thata2_n1, omega1_n1, omega2_n1)
+    (world.theta1, world.theta2) = (thata1_n1, thata2_n1)
     
 }
 
@@ -128,7 +163,7 @@ fn rung_kutta(time: f32, var: f32, world: &World, fun: &dyn Fn(f32, f32, &World)
     let c: f32 = fun(time + H/2.0, var + H*b/2.0, world);
     // d 1= f(t_n + H, w1_n + H*c)
     let d: f32 = fun(time + H, var + H*c, world);
-    let cof = (H/6.0)*(a + 2.0*b + 2.0*c + d);
+    let new_var = var + H*(a + 2.0*b + 2.0*c + d)/6.0;
     
     // let new_var = var + cof;
     // print!("a: {} b: {} c:{} d:{} cof: {} var {} new_var {}\n", a, b, c, d, cof, var, new_var);
@@ -186,9 +221,6 @@ fn der_zeta2(_: f32, _:f32, world: &World) -> f32 {
     // print!("der zets\n");
     world.omega2
 }
-
-
-
 
 fn pos_string(descr: &str, pos: &Position) -> String {
     let mut pos_string = String::from(descr);
