@@ -1,7 +1,7 @@
 const GRAV: f32 = 30.0;
 
-const M1: f32 = 3.0;
-const M2: f32 = 1.5;
+const M1: f32 = 4.0;
+const M2: f32 = 2.5;
 const L1: f32 = 2.0;
 const L2: f32 = 1.5;
 const H: f32 = 0.01;
@@ -9,14 +9,14 @@ const H: f32 = 0.01;
 
 const L_COF: f32 = 100.0;
 const THETA_1: f32 = 60.0;
-const THETA_2: f32 = -20.0;
+const THETA_2: f32 = -30.0;
 
 const OMEGA_1: f32 = 0.0;
 const OMEGA_2: f32 = 0.0;
 
 
-use macroquad::prelude::*;
-// use std::{thread, time};
+use macroquad::{prelude::*, miniquad::date::now};
+use std::{thread, time};
 
 #[derive(Debug, Copy, Clone)]
 struct Position {
@@ -45,13 +45,10 @@ fn total_energy(var_vec: &Vec<f32>) -> f32 {
 }
     
 
-#[macroquad::main("BasicSHapes")]
+#[macroquad::main("Simple Pendel")]
 async fn main() {
     print!("Starting execution\n\n");
 
-
-
-    let string_anchor: Position = Position { x: screen_width()/2.0, y:20.0};
 
     // var_vec[0] = theta_1
     // var_vec[1] = theta_2
@@ -61,11 +58,13 @@ async fn main() {
     let mut var_vec: Vec<f32> = vec![degtorad(THETA_1), degtorad(THETA_2), OMEGA_1, OMEGA_2, 0.0];
     let fn_vec: Vec<&dyn Fn(&Vec<f32>) -> f32> = vec![&der_zeta1, &der_zeta2, &der_omega1, &der_omega2, &der_time];
 
-    
-
     let mut max_kinenergy: f32 = 0.0;
-    
+    let mut traj: Vec<(Position, Position)> = Vec::new();
+    let mut frames: i32 = 0;
+        
     loop {
+        let string_anchor: Position = Position { x: screen_width()/2.0, y:20.0};
+        // time:now()
         // print!("time: {}; (zeta1_old {} zeta2_old {} omega1_old {} omega2_old {}) -> ", time, world.theta1, world.theta2, world.omega1, world.omega2);
         update(&mut var_vec, &fn_vec);
         let theta_1 = &var_vec[0];
@@ -81,25 +80,43 @@ async fn main() {
         
         let fb_pos: Position = Position { x: string_anchor.x + L1*L_COF*theta_1.sin(), y: string_anchor.y + L1*L_COF*theta_1.cos() };
         let sb_pos: Position = Position { x: fb_pos.x + L2*L_COF*theta_2.sin(), y: fb_pos.y + L2*L_COF*theta_2.cos() };
-
         
         clear_background(BLACK);
         let _ball_pos_string= pos_string("Ball Position", &fb_pos);
 
+        
+        draw_text("IT WORKS!", 20.0, 20.0, 30.0, WHITE);
+        draw_text(&format!("FPS: {}", get_fps()), screen_width() - 350.0, 20.0, 20.0, WHITE);
+        draw_text(&format!("Cur Total Energy: {}", energy), screen_width() - 350.0, 40.0, 20.0, WHITE);
+        
+        traj.push((fb_pos.clone(), sb_pos.clone()));         
+        
+        if traj.len() > 60 * 3 {
+            traj.remove(0);
+        }
+        
+        
+        let mut last_f_ball: Position = Position { x: 0.0, y: 0.0 };
+        let mut last_s_ball: Position = Position { x: 0.0, y: 0.0 };
+        
+        for (i, (first_ball, sec_ball)) in traj.iter().enumerate() {
+            draw_line(first_ball.x, first_ball.y, last_f_ball.x, last_f_ball.y, 4.0 * (i as f32 / traj.len() as f32), BLUE);
+            draw_line(sec_ball.x, sec_ball.y, last_s_ball.x, last_s_ball.y, 4.0 * (i as f32 / traj.len() as f32), RED);
+            last_f_ball = first_ball.clone();
+            last_s_ball = sec_ball.clone();
+        }
+        
         draw_line(string_anchor.x, string_anchor.y, fb_pos.x, fb_pos.y, 4.0, WHITE);
         draw_line(fb_pos.x, fb_pos.y, sb_pos.x, sb_pos.y, 4.0, WHITE);
         
-        draw_circle(fb_pos.x, fb_pos.y, 15.0, WHITE);
-        draw_circle(sb_pos.x, sb_pos.y, 15.0, WHITE);
-
-        draw_text("IT WORKS!", 20.0, 20.0, 30.0, WHITE);
-        draw_text(&format!("Max Total Energy: {}", max_kinenergy), screen_width() - 350.0, 20.0, 20.0, WHITE);
-        draw_text(&format!("Cur Total Energy: {}", energy), screen_width() - 350.0, 40.0, 20.0, WHITE);
-
-
-        // time += H;
-        // thread::sleep(time::Duration::from_millis(1));
-
+        draw_circle(fb_pos.x, fb_pos.y, 15.0, BLUE);
+        draw_circle(sb_pos.x, sb_pos.y, 15.0, RED);
+        
+        if frames > 60*100 {
+            frames = 0;
+        }
+        frames += 1;
+        
         next_frame().await
     }
    
@@ -153,7 +170,6 @@ fn rung_kutta(var_vec: &Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) -> Ve
 }
 
 fn comp(var_vec: &Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) -> Vec<f32>{
-    // let zp = var_vec.iter().zip(fn_vec.iter());
     let mut ans: Vec<f32> = Vec::new();
 
 
@@ -219,8 +235,6 @@ fn der_zeta2(world: &Vec<f32>) -> f32 {
 fn der_time(_: &Vec<f32>) -> f32 { 1.0 }
 
 fn add(a: &Vec<f32>, b: &Vec<f32>) -> Vec<f32> {
-    // print!("a is: [{} {} {} {} {}]\n", a[0], a[1], a[2], a[3], a[4]);
-    // print!("b is: [{} {} {} {} {}]\n\n", b[0], b[1], b[2], b[3], b[4]);
     let z = a.iter().zip(b.iter()).map(|(&b, &v)| b + v).collect::<Vec<_>>();
     z
 }
