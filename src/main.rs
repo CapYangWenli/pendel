@@ -5,6 +5,7 @@ const M2: f32 = 2.5;
 const L1: f32 = 2.0;
 const L2: f32 = 1.5;
 const H: f32 = 0.01;
+// const DEB: bool = false;
 
 const L_COF: f32 = 100.0;
 const THETA_1: f32 = 60.0;
@@ -12,6 +13,8 @@ const THETA_2: f32 = -30.0;
 
 const OMEGA_1: f32 = 0.0;
 const OMEGA_2: f32 = 0.0;
+
+use macroquad::{miniquad::date::now, prelude::*};
 
 #[derive(Debug, Copy, Clone)]
 struct Position {
@@ -148,7 +151,6 @@ async fn main() {
     }
 }
 
-
 fn update(var_vec: &mut Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) {
     let new_var_vec = rung_kutta(var_vec, fn_vec);
     *var_vec = new_var_vec;
@@ -164,7 +166,7 @@ fn rung_kutta(var_vec: &Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) -> Ve
     let a: Vec<f32> = comp(var_vec, fn_vec);
 
     // b 1= f(t_n + H/2, w1_n + H*a/2)
-    // let b_vec: Vec<i32> =
+
     let a_h = (&a).into_iter().map(|x| H / 2.0 * x).collect::<Vec<_>>();
     let b: Vec<f32> = comp(&add(&a_h, var_vec), fn_vec);
 
@@ -176,7 +178,7 @@ fn rung_kutta(var_vec: &Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) -> Ve
     let c_h = (&c).into_iter().map(|x| H * x).collect::<Vec<_>>();
     let d: Vec<f32> = comp(&add(&c_h, &var_vec), fn_vec);
 
-    // let var = var + H*(a + 2.0*b + 2.0*c + d)/6.0;
+    //  var = var + H*(a + 2.0*b + 2.0*c + d)/6.0;
     let b_2 = (&b).into_iter().map(|x| 2.0 * x).collect::<Vec<_>>();
     let c_2 = (&c).into_iter().map(|x| 2.0 * x).collect::<Vec<_>>();
 
