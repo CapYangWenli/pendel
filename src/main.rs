@@ -1,12 +1,18 @@
 const GRAV: f32 = 30.0;
+
 const M1: f32 = 3.0;
-const M2: f32 = 2.5;
-const F_LENGTH: f32 = 2.5;
-const S_LENGTH: f32 = 1.5;
+const M2: f32 = 1.5;
+const L1: f32 = 2.0;
+const L2: f32 = 1.5;
 const H: f32 = 0.01;
 // const DEB: bool = false;
 
 const L_COF: f32 = 100.0;
+const THETA_1: f32 = 60.0;
+const THETA_2: f32 = -20.0;
+
+const OMEGA_1: f32 = 0.0;
+const OMEGA_2: f32 = 0.0;
 
 
 use macroquad::prelude::*;
@@ -18,57 +24,63 @@ struct Position {
     y: f32
 }
 
-struct World {
-    omega1: f32,
-    omega2: f32,
-    theta1: f32,
-    theta2: f32,
+fn total_energy(var_vec: &Vec<f32>) -> f32 {
+
+    let theta1 = var_vec[0];
+    let theta2 = var_vec[1];
+    let omega1 = var_vec[2];
+    let omega2 = var_vec[3];
+
+    let energy = 
+    M1*(omega1*L1).powi(2) / 2.0
+    + M2*( 
+            (omega2*L2).powi(2) 
+            + (omega1*L1).powi(2)
+            + 2.0*omega1*omega2*L1*L2*(theta1 - theta2).cos()
+        ) / 2.0
+    - M1*GRAV*L1*theta1.cos()
+    - M2*GRAV*(L1*theta1.cos() + L2*theta2.cos());
+
+    energy
 }
-
-impl World {
-    fn total_energy(&self) -> f32 {
-        let energy = 
-        M1*(self.omega1*F_LENGTH).powi(2) / 2.0
-        + M2*( 
-                (self.omega2*S_LENGTH).powi(2) 
-                + (self.omega1*F_LENGTH).powi(2)
-                + 2.0*self.omega1*self.omega2*F_LENGTH*S_LENGTH*(self.theta1 - self.theta2).cos()
-            ) / 2.0
-        - M1*GRAV*F_LENGTH*self.theta1.cos()
-        - M2*GRAV*(F_LENGTH*self.theta1.cos() + S_LENGTH*self.theta2.cos());
-
-        energy
-    }
     
-}
 
 #[macroquad::main("BasicSHapes")]
 async fn main() {
     print!("Starting execution\n\n");
 
 
+
     let string_anchor: Position = Position { x: screen_width()/2.0, y:20.0};
-    let mut world: World = World { omega1: 0.0, omega2: 0.0, theta1: 60.0, theta2: -10.0};
-    let mut time = 0.0;
+
+    // var_vec[0] = theta_1
+    // var_vec[1] = theta_2
+    // var_vec[2] = omega_1
+    // var_vec[3] = omega_2
+    // var_vec[4] = time
+    let mut var_vec: Vec<f32> = vec![degtorad(THETA_1), degtorad(THETA_2), OMEGA_1, OMEGA_2, 0.0];
+    let fn_vec: Vec<&dyn Fn(&Vec<f32>) -> f32> = vec![&der_zeta1, &der_zeta2, &der_omega1, &der_omega2, &der_time];
+
+    
 
     let mut max_kinenergy: f32 = 0.0;
-
-    world.theta1 = degtorad(&world.theta1);
-    world.theta2 = degtorad(&world.theta2);
-
     
     loop {
         // print!("time: {}; (zeta1_old {} zeta2_old {} omega1_old {} omega2_old {}) -> ", time, world.theta1, world.theta2, world.omega1, world.omega2);
-        update(&mut world, time);
-        let energy = world.total_energy();
+        update(&mut var_vec, &fn_vec);
+        let theta_1 = &var_vec[0];
+        let theta_2 = &var_vec[1];
+        
+        
+        let energy = total_energy(&var_vec);
         if (max_kinenergy < energy) || (max_kinenergy == 0.0) {
             max_kinenergy = energy;
         }
 
         // print!("(zeta1_new {} zeta2_new {} omega1_new {} omega2_new {})\n", world.theta1, world.theta2, world.omega1, world.omega2);
         
-        let fb_pos: Position = Position { x: string_anchor.x + F_LENGTH*L_COF*world.theta1.sin(), y: string_anchor.y + F_LENGTH*L_COF*world.theta1.cos() };
-        let sb_pos: Position = Position { x: fb_pos.x + S_LENGTH*L_COF*world.theta2.sin(), y: fb_pos.y + S_LENGTH*L_COF*world.theta2.cos() };
+        let fb_pos: Position = Position { x: string_anchor.x + L1*L_COF*theta_1.sin(), y: string_anchor.y + L1*L_COF*theta_1.cos() };
+        let sb_pos: Position = Position { x: fb_pos.x + L2*L_COF*theta_2.sin(), y: fb_pos.y + L2*L_COF*theta_2.cos() };
 
         
         clear_background(BLACK);
@@ -85,7 +97,7 @@ async fn main() {
         draw_text(&format!("Cur Total Energy: {}", energy), screen_width() - 350.0, 40.0, 20.0, WHITE);
 
 
-        time += H;
+        // time += H;
         // thread::sleep(time::Duration::from_millis(1));
 
         next_frame().await
@@ -95,109 +107,122 @@ async fn main() {
 
 // tHeta = a
 // omega = w
-fn update(world: &mut World, time: f32) {
+fn update(var_vec: &mut Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) {
 
-    //------- 1 ------
-    // let thata1_n1 = rung_kutta(time, world.theta1, world, &der_zeta1);
-    // let thata2_n1 = rung_kutta(time, world.theta2, world, &der_zeta2);
-    
-    // let omega1_n1 = rung_kutta(time, world.omega1, world, &der_omega1);
-    // let omega2_n1 = rung_kutta(time, world.omega2, world, &der_omega2);    
-
-    // (world.theta1, world.theta2, world.omega1, world.omega2) = 
-    // (thata1_n1, thata2_n1, omega1_n1, omega2_n1)
-
-    //------- 2 ------
-    // let omega1_n1 = rung_kutta(time, world.omega1, world, &der_omega1);
-    // let omega2_n1 = rung_kutta(time, world.omega2, world, &der_omega2); 
-    // world.omega1 = omega1_n1;
-    // world.omega2 = omega2_n1;
-
-    // let thata1_n1 = rung_kutta(time, world.theta1, world, &der_zeta1);
-    // let thata2_n1 = rung_kutta(time, world.theta2, world, &der_zeta2);
-
-    // (world.theta1, world.theta2) = (thata1_n1, thata2_n1)
-
-    //------- 3 ------
-    world.omega1 = rung_kutta(time, world.omega1, world, &der_omega1);
-    world.omega2 = rung_kutta(time, world.omega2, world, &der_omega2); 
-
-    world.theta1 = rung_kutta(time, world.theta1, world, &der_zeta1);
-    world.theta2 = rung_kutta(time, world.theta2, world, &der_zeta2);
+   let new_var_vec = rung_kutta(var_vec, fn_vec);
+   *var_vec = new_var_vec;
     
 }
 
 
-fn rung_kutta(time: f32, var: f32, world: &World, fun: &dyn Fn(f32, f32, &World) -> f32) -> f32{
-    
-    let a: f32 = fun(time, var, world);
+fn rung_kutta(var_vec: &Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) -> Vec<f32>{
+
+    // var_vec[0] = theta_1
+    // var_vec[1] = theta_2
+    // var_vec[2] = omega_1
+    // var_vec[3] = omega_2
+    // var_vec[4] = time
+
+    let a: Vec<f32> = comp(var_vec, fn_vec);
+
     // print!("a: {} is? var: {}\n", a, var);
     // b 1= f(t_n + H/2, w1_n + H*a/2)
-    let b: f32 = fun(time + H/2.0, var + H*a/2.0, world);
+
+    // let b_vec: Vec<i32> = 
+    let a_h = (&a).into_iter().map(|x| H/2.0 * x).collect::<Vec<_>>();
+    let b: Vec<f32> = comp(&add(&a_h, var_vec), fn_vec);
+
     // c 1= f(t_n + H/2, w1_n + H*b/2)
-    let c: f32 = fun(time + H/2.0, var + H*b/2.0, world);
+    let b_h = (&b).into_iter().map(|x| H/2.0 * x).collect::<Vec<_>>();
+    let c: Vec<f32> = comp(&add(&b_h, &var_vec), fn_vec);
+
     // d 1= f(t_n + H, w1_n + H*c)
-    let d: f32 = fun(time + H, var + H*c, world);
+    let c_h = (&c).into_iter().map(|x| H * x).collect::<Vec<_>>();
+    let d: Vec<f32> = comp(&add(&c_h, &var_vec), fn_vec);
 
     // let var = var + H*(a + 2.0*b + 2.0*c + d)/6.0;
+    let b_2 = (&b).into_iter().map(|x| 2.0 * x).collect::<Vec<_>>();
+    let c_2 = (&c).into_iter().map(|x| 2.0 * x).collect::<Vec<_>>();
 
-    // let var = var + H*a/6.0 + H*b/3.0 + H*c/3.0 + H*d/6.0;
+    let coff = add(&add(&add(&a, &b_2), &c_2), &d);
+    let coff_h = coff.into_iter().map(|x| H * x / 6.0).collect::<Vec<_>>();
 
-    
-    // let new_var = var + cof;
-    // print!("a: {} b: {} c:{} d:{} cof: {} var {} new_var {}\n", a, b, c, d, cof, var, new_var);
-    // print!("Kutts cof: {} {}\n", cof, var);
-    let var = var + fun(time + H, var, world)*H;
+    let var = add(&var_vec, &coff_h);
 
     var
 }
 
+fn comp(var_vec: &Vec<f32>, fn_vec: &Vec<&dyn Fn(&Vec<f32>) -> f32>) -> Vec<f32>{
+    // let zp = var_vec.iter().zip(fn_vec.iter());
+    let mut ans: Vec<f32> = Vec::new();
 
-fn der_omega1(_: f32, omega1: f32, world: &World) -> f32 {
-    let theta1 = world.theta1;
-    let theta2 = world.theta2;
-    let omega2 = world.omega2;
+
+    for fnc in fn_vec {
+        ans.push(fnc(var_vec));
+    }
+
+    ans
+}
+
+
+fn der_omega1(world: &Vec<f32>) -> f32 {
+    let theta1 = world[0];
+    let theta2 = world[1];
+    let omega1 = world[2];
+    let omega2 = world[3];
     
     let delta_omega1: f32 = 
     (
         -GRAV*(2.0*M1 + M2)*theta1.sin() - 
         M2*GRAV*(theta1 - 2.0 * theta2).sin() -
-        2.0*M2*omega2*omega2*S_LENGTH*(theta1 - theta2).sin() -
-        M2*omega1*omega1*F_LENGTH*(2.0*(theta1 - theta2)).sin()
+        2.0*M2*omega2*omega2*L2*(theta1 - theta2).sin() -
+        M2*omega1*omega1*L1*(2.0*(theta1 - theta2)).sin()
     ) /
-    (F_LENGTH * ( 2.0*M1 + M2 - M2*(2.0*theta1 - 2.0*theta2).cos())); 
+    (L1 * ( 2.0*M1 + M2 - M2*(2.0*theta1 - 2.0*theta2).cos())); 
 
     delta_omega1
 }
 
-fn der_omega2(_: f32, omega2: f32, world: &World) -> f32 {
-    let theta1 = world.theta1;
-    let theta2 = world.theta2;
-    let omega1 = world.omega1;
+fn der_omega2(world: &Vec<f32>) -> f32 {
+    let theta1 = world[0];
+    let theta2 = world[1];
+    let omega1 = world[2];
+    let omega2 = world[3];
     
     let delta_omega2: f32 = 
     (
         2.0*(theta1-theta2).sin()*
         (
-            (omega1*omega1*F_LENGTH*(M1 + M2)) + 
+            (omega1*omega1*L1*(M1 + M2)) + 
             GRAV*(M1 + M2)*theta1.cos() +
-            omega2*omega2*S_LENGTH*M2*(theta1 - theta2).cos()
+            omega2*omega2*L2*M2*(theta1 - theta2).cos()
         ) 
     ) / 
-    (S_LENGTH* 
+    (L2* 
     (  2.0*M1 + M2 - M2*(2.0*theta1 - 2.0*theta2).cos())
     ); 
     delta_omega2
 }
 
-fn der_zeta1(_: f32, _:f32, world: &World) -> f32 {
-    // print!("der zets\n");
-    world.omega1
+fn der_zeta1(world: &Vec<f32>) -> f32 {
+    let omega1 = world[2];
+
+    omega1
 }
 
-fn der_zeta2(_: f32, _:f32, world: &World) -> f32 {
-    // print!("der zets\n");
-    world.omega2
+fn der_zeta2(world: &Vec<f32>) -> f32 {
+    let omega2 = world[3];
+
+    omega2
+}
+
+fn der_time(_: &Vec<f32>) -> f32 { 1.0 }
+
+fn add(a: &Vec<f32>, b: &Vec<f32>) -> Vec<f32> {
+    // print!("a is: [{} {} {} {} {}]\n", a[0], a[1], a[2], a[3], a[4]);
+    // print!("b is: [{} {} {} {} {}]\n\n", b[0], b[1], b[2], b[3], b[4]);
+    let z = a.iter().zip(b.iter()).map(|(&b, &v)| b + v).collect::<Vec<_>>();
+    z
 }
 
 fn pos_string(descr: &str, pos: &Position) -> String {
@@ -211,7 +236,7 @@ fn pos_string(descr: &str, pos: &Position) -> String {
     pos_string
 }
 
-fn degtorad(ang: &f32) -> f32 { 
+fn degtorad(ang: f32) -> f32 { 
     ang * std::f32::consts::PI / 180.0
 }
 
